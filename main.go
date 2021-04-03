@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/mafredri/cdp"
@@ -14,8 +16,13 @@ import (
 	"github.com/mafredri/cdp/rpcc"
 )
 
+const output_path = "./output/"
+
+var commit_num = 1
+var max_count = 10
+
 func main() {
-	err := run(5 * time.Second)
+	err := run(30 * time.Second)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -42,10 +49,10 @@ func run(timeout time.Duration) error {
 	}
 	defer conn.Close() // Leaving connections open will leak memory.
 
-	c := cdp.NewClient(conn)
+	cdpClient := cdp.NewClient(conn)
 
 	// Open a DOMContentEventFired client to buffer this event.
-	domContent, err := c.Page.DOMContentEventFired(ctx)
+	domContent, err := cdpClient.Page.DOMContentEventFired(ctx)
 	if err != nil {
 		return err
 	}
@@ -53,14 +60,14 @@ func run(timeout time.Duration) error {
 
 	// Enable events on the Page domain, it's often preferrable to create
 	// event clients before enabling events so that we don't miss any.
-	if err = c.Page.Enable(ctx); err != nil {
+	if err = cdpClient.Page.Enable(ctx); err != nil {
 		return err
 	}
 
 	// Navigate to chromium.googlesource.com/chromiumos/platform/tast-tests/
 	navArgs := page.NewNavigateArgs("https://chromium.googlesource.com/chromiumos/platform/tast-tests/").
 		SetReferrer("https://duckduckgo.com")
-	nav, err := c.Page.Navigate(ctx, navArgs)
+	nav, err := cdpClient.Page.Navigate(ctx, navArgs)
 	if err != nil {
 		return err
 	}
@@ -74,143 +81,39 @@ func run(timeout time.Duration) error {
 
 	// Fetch the document root node. We can pass nil here
 	// since this method only takes optional arguments.
-	doc, err := c.DOM.GetDocument(ctx, nil)
+	documentReply, err := cdpClient.DOM.GetDocument(ctx, nil)
 	if err != nil {
 		return err
 	}
 
-	// Click main under branches on the left, it navigates you to the latest commit
-	query_reply, err := c.DOM.QuerySelector(ctx, &dom.QuerySelectorArgs{
-		NodeID:   doc.Root.NodeID,
-		Selector: "body > div > div > div.RepoShortlog > div.RepoShortlog-refs > div > ul > li:nth-child(1) > a",
-	})
+	selector := "body > div > div > div.RepoShortlog > div.RepoShortlog-refs > div > ul > li:nth-child(1) > a"
+	findAndClickButton(cdpClient, ctx, documentReply, selector)
 
-	if err != nil {
-		return err
+	for i := 0; i < max_count; i++ {
+		documentReply = waitForPageReady(cdpClient, ctx)
+		selector = "body > div > div > div.u-monospace.Metadata > table > tbody > tr:nth-child(1) > td:nth-child(2)"
+		attributeReply := getAttribute(cdpClient, ctx, documentReply, selector)
+
+		commitId := remove_tag(attributeReply.OuterHTML, "td")
+		selector = "body > div > div > pre"
+		attributeReply = getAttribute(cdpClient, ctx, documentReply, selector)
+		commitMesage := attributeReply.OuterHTML
+
+		tag := "<pre class=\"u-pre u-monospace MetadataMessage\">"
+		commitMesage = strings.Replace(commitMesage, tag, "", 1)
+		commitMesage = strings.Replace(commitMesage, "</pre>", "", 1)
+
+		fmt.Println("commitMessage", commitMesage)
+
+		createAndWriteFile(commitId, commitMesage)
+
+		// go to next commit
+		commit_num++
+		selector = "body > div > div > div.u-monospace.Metadata > table > tbody > tr:nth-child(5) > td > a"
+		findAndClickButton(cdpClient, ctx, documentReply, selector)
+		// documentReply = waitForPageReady(cdpClient, ctx)
+		fmt.Println("Finish", commit_num)
 	}
-
-	boxModelReply, err := c.DOM.GetBoxModel(ctx, &dom.GetBoxModelArgs{
-		NodeID: &query_reply.NodeID,
-	})
-
-	if err != nil {
-		return err
-	}
-
-	// click main branch link tag
-	x := boxModelReply.Model.Content[0]
-	y := boxModelReply.Model.Content[1]
-	clickButton(c, ctx, x, y)
-
-	// Parse page and write only commit message to the file, each file should have a unique name
-
-	// get commit id for file title
-	// body > div > div > div.u-monospace.Metadata > table > tbody > tr:nth-child(1) > td:nth-child(2)
-
-	// Get the outer HTML for the page.
-	doc, err = c.DOM.GetDocument(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	result, err := c.DOM.GetOuterHTML(ctx, &dom.GetOuterHTMLArgs{
-		NodeID: &doc.Root.NodeID,
-	})
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("HTML: %s\n", result.OuterHTML)
-
-	query_reply, err = c.DOM.QuerySelector(ctx, &dom.QuerySelectorArgs{
-		NodeID:   doc.Root.NodeID,
-		Selector: "body > div > div > div.u-monospace.Metadata > table > tbody > tr:nth-child(1) > th",
-	})
-
-	if err != nil {
-		fmt.Println(err)
-		panic(err)
-	}
-
-	fmt.Println(query_reply.NodeID)
-
-	// NodeID: &query_reply.NodeID,
-	// boxModelReply, err := c.DOM.GetBoxModel(ctx, &dom.GetBoxModelArgs{
-	// 	NodeID: &query_reply.NodeID,
-	// })
-
-	// attributeReply, err := c.DOM.GetAttributes(ctx, &dom.GetAttributesArgs{
-	// 	NodeID: query_reply.NodeID,
-	// })
-
-	// if err != nil {
-	// 	fmt.Println(err)
-
-	// 	panic(err)
-	// }
-
-	// fmt.Println("commit id", attributeReply)
-	// getAttributes
-
-	// Open a DOMContentEventFired client to buffer this event.
-	// domContent, err = c.Page.DOMContentEventFired(ctx)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer domContent.Close()
-
-	// if _, err = domContent.Recv(); err != nil {
-	// 	return err
-	// }
-
-	// getCommitId(c, ctx, doc)
-
-	// doc = html.Parse(strings.NewReader(result.OuterHTML))
-
-	// Capture a screenshot of the current page.
-	// screenshotName := "screenshot.jpg"
-	// screenshotArgs := page.NewCaptureScreenshotArgs().
-	// 	SetFormat("jpeg").
-	// 	SetQuality(80)
-	// screenshot, err := c.Page.CaptureScreenshot(ctx, screenshotArgs)
-	// if err != nil {
-	// 	return err
-	// }
-	// if err = ioutil.WriteFile(screenshotName, screenshot.Data, 0644); err != nil {
-	// 	return err
-	// }
-
-	// fmt.Printf("Saved screenshot: %s\n", screenshotName)
-
-	// pdfName := "page.pdf"
-	// f, err := os.Create(pdfName)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// pdfArgs := page.NewPrintToPDFArgs().
-	// 	SetTransferMode("ReturnAsStream") // Request stream.
-	// pdfData, err := c.Page.PrintToPDF(ctx, pdfArgs)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// sr := c.NewIOStreamReader(ctx, *pdfData.Stream)
-	// r := bufio.NewReader(sr)
-
-	// // Write to file in ~r.Size() chunks.
-	// _, err = r.WriteTo(f)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// err = f.Close()
-	// if err != nil {
-	// 	return err
-	// }
-
-	// fmt.Printf("Saved PDF: %s\n", pdfName)
-
 	return nil
 }
 
@@ -241,39 +144,81 @@ func clickButton(c *cdp.Client, ctx context.Context, x float64, y float64) {
 	}
 }
 
-func waitDomContent() {
-	domContent, err := c.Page.DOMContentEventFired(ctx)
+func remove_tag(original_string string, tag string) string {
+	replaced := strings.Replace(original_string, "<"+tag+">", "", 1)
+	return strings.Replace(replaced, "</"+tag+">", "", 1)
+}
+
+func createAndWriteFile(file_name string, content string) {
+	f, err := os.Create(output_path + file_name)
+
 	if err != nil {
-		return err
+		log.Fatal(err)
+	}
+
+	defer f.Close()
+
+	_, err2 := f.WriteString(content)
+
+	if err2 != nil {
+		log.Fatal(err2)
+	}
+	fmt.Println("done")
+}
+
+func findAndClickButton(cdpClient *cdp.Client, ctx context.Context, documentReply *dom.GetDocumentReply, selector string) {
+	query_reply, err := cdpClient.DOM.QuerySelector(ctx, &dom.QuerySelectorArgs{
+		NodeID:   documentReply.Root.NodeID,
+		Selector: selector,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	boxModelReply, err := cdpClient.DOM.GetBoxModel(ctx, &dom.GetBoxModelArgs{
+		NodeID: &query_reply.NodeID,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	x := boxModelReply.Model.Content[0]
+	y := boxModelReply.Model.Content[1]
+	clickButton(cdpClient, ctx, x, y)
+}
+
+func waitForPageReady(cdpClient *cdp.Client, ctx context.Context) *dom.GetDocumentReply {
+	domContent, err := cdpClient.Page.DOMContentEventFired(ctx)
+	if err != nil {
+		panic(err)
 	}
 	defer domContent.Close()
+
+	// Enable events on the Page domain, it's often preferrable to create
+	// event clients before enabling events so that we don't miss any.
+	if err = cdpClient.Page.Enable(ctx); err != nil {
+		panic(err)
+	}
+
+	// Wait until we have a DOMContentEventFired event.
+	if _, err = domContent.Recv(); err != nil {
+		panic(err)
+	}
+
+	documentReply, err := cdpClient.DOM.GetDocument(ctx, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	return documentReply
 }
 
-// func Body(doc *html.Node) (*html.Node, error) {
-// 	var body *html.Node
-// 	var crawler func(*html.Node)
-// 	crawler = func(node *html.Node) {
-// 		if node.Type == html.ElementNode && node.Data == "body" {
-// 			body = node
-// 			return
-// 		}
-// 		for child := node.FirstChild; child != nil; child = child.NextSibling {
-// 			crawler(child)
-// 		}
-// 	}
-// 	crawler(doc)
-// 	if body != nil {
-// 		return body, nil
-// 	}
-// 	return nil, errors.New("Missing <body> in the node tree")
-// }
-
-func getCommitId(c *cdp.Client, ctx context.Context, doc *dom.GetDocumentReply) string {
-	fmt.Println(doc.Root.NodeID)
-
-	query_reply, err := c.DOM.QuerySelector(ctx, &dom.QuerySelectorArgs{
-		NodeID:   doc.Root.NodeID,
-		Selector: "body > div > div > div.u-monospace.Metadata > table > tbody > tr:nth-child(1) > td:nth-child(2)",
+func getAttribute(cdpClient *cdp.Client, ctx context.Context, documentReply *dom.GetDocumentReply, selector string) *dom.GetOuterHTMLReply {
+	query_reply, err := cdpClient.DOM.QuerySelector(ctx, &dom.QuerySelectorArgs{
+		NodeID:   documentReply.Root.NodeID,
+		Selector: selector,
 	})
 
 	if err != nil {
@@ -281,23 +226,15 @@ func getCommitId(c *cdp.Client, ctx context.Context, doc *dom.GetDocumentReply) 
 		panic(err)
 	}
 
-	fmt.Println(query_reply)
-
-	attribute_rely, err := c.DOM.GetAttributes(ctx, &dom.GetAttributesArgs{
-		NodeID: query_reply.NodeID,
+	htmlReply, err := cdpClient.DOM.GetOuterHTML(ctx, &dom.GetOuterHTMLArgs{
+		NodeID: &query_reply.NodeID,
 	})
 
 	if err != nil {
 		fmt.Println(err)
+
 		panic(err)
 	}
 
-	fmt.Println("commit id", attribute_rely)
-	// getAttributes
-
-	return ""
-}
-
-func setup() {
-
+	return htmlReply
 }

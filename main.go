@@ -14,18 +14,29 @@ import (
 	"github.com/mafredri/cdp/protocol/input"
 	"github.com/mafredri/cdp/protocol/page"
 	"github.com/mafredri/cdp/rpcc"
+	"github.com/yukiOsaki/goc-power-port-policies/src"
 )
 
-const output_path = "./output/"
-
-var commit_num = 1
-var max_count = 10
+var outputPath = "./output/"
+var commitCount = 1
+var maxCount = src.DefaultCommitCount
+var branch = src.DefaultBranch
+var url = src.DefaultUrl
 
 func main() {
-	err := run(30 * time.Second)
+	args := src.HandleArguments(os.Args)
+	maxCount = args.Numbers
+	outputPath = "./" + args.OutPutPath + "/"
+	branch = args.Branch
+	url = args.Url
+
+	// return
+	err := run(time.Duration(args.Timeout) * time.Second)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	os.Exit(0)
 }
 
 func run(timeout time.Duration) error {
@@ -65,7 +76,7 @@ func run(timeout time.Duration) error {
 	}
 
 	// Navigate to chromium.googlesource.com/chromiumos/platform/tast-tests/
-	navArgs := page.NewNavigateArgs("https://chromium.googlesource.com/chromiumos/platform/tast-tests/").
+	navArgs := page.NewNavigateArgs(url).
 		SetReferrer("https://duckduckgo.com")
 	nav, err := cdpClient.Page.Navigate(ctx, navArgs)
 	if err != nil {
@@ -86,10 +97,19 @@ func run(timeout time.Duration) error {
 		return err
 	}
 
-	selector := "body > div > div > div.RepoShortlog > div.RepoShortlog-refs > div > ul > li:nth-child(1) > a"
-	findAndClickButton(cdpClient, ctx, documentReply, selector)
+	selector := ""
+	if branch == "main" {
+		selector = "body > div > div > div.RepoShortlog > div.RepoShortlog-refs > div > ul > li:nth-child(1) > a"
+		findAndClickButton(cdpClient, ctx, documentReply, selector)
+	} else {
+		navArgs := page.NewNavigateArgs(url + "/+/refs/heads/" + branch)
+		nav, err = cdpClient.Page.Navigate(ctx, navArgs)
+		if err != nil {
+			return err
+		}
+	}
 
-	for i := 0; i < max_count; i++ {
+	for i := 1; i < maxCount; i++ {
 		documentReply = waitForPageReady(cdpClient, ctx)
 		selector = "body > div > div > div.u-monospace.Metadata > table > tbody > tr:nth-child(1) > td:nth-child(2)"
 		attributeReply := getAttribute(cdpClient, ctx, documentReply, selector)
@@ -108,11 +128,10 @@ func run(timeout time.Duration) error {
 		createAndWriteFile(commitId, commitMesage)
 
 		// go to next commit
-		commit_num++
+		commitCount++
 		selector = "body > div > div > div.u-monospace.Metadata > table > tbody > tr:nth-child(5) > td > a"
 		findAndClickButton(cdpClient, ctx, documentReply, selector)
-		// documentReply = waitForPageReady(cdpClient, ctx)
-		fmt.Println("Finish", commit_num)
+		fmt.Println("Finish", commitCount)
 	}
 	return nil
 }
@@ -150,7 +169,11 @@ func remove_tag(original_string string, tag string) string {
 }
 
 func createAndWriteFile(file_name string, content string) {
-	f, err := os.Create(output_path + file_name)
+	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
+		os.Mkdir(outputPath, 0755)
+	}
+
+	f, err := os.Create(outputPath + file_name)
 
 	if err != nil {
 		log.Fatal(err)
@@ -163,7 +186,6 @@ func createAndWriteFile(file_name string, content string) {
 	if err2 != nil {
 		log.Fatal(err2)
 	}
-	fmt.Println("done")
 }
 
 func findAndClickButton(cdpClient *cdp.Client, ctx context.Context, documentReply *dom.GetDocumentReply, selector string) {
@@ -204,7 +226,7 @@ func waitForPageReady(cdpClient *cdp.Client, ctx context.Context) *dom.GetDocume
 
 	// Wait until we have a DOMContentEventFired event.
 	if _, err = domContent.Recv(); err != nil {
-		panic(err)
+		os.Exit(1)
 	}
 
 	documentReply, err := cdpClient.DOM.GetDocument(ctx, nil)

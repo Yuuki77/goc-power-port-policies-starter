@@ -9,20 +9,22 @@ import (
 )
 
 type Args struct {
-	Numbers    int
-	Branch     string
-	Timeout    int
-	OutPutPath string
-	Url        string
+	Numbers       int
+	Branch        string
+	Timeout       int
+	OutPutPath    string
+	CsvOutputPath string
+	Url           string
 }
 
 func HandleArguments(args []string) Args {
 	result := Args{
-		Numbers:    DefaultCommitCount,
-		Branch:     DefaultBranch,
-		Timeout:    DefaultTimeout,
-		OutPutPath: DefaultOutPutPath,
-		Url:        DefaultUrl,
+		Numbers:       DefaultCommitCount,
+		Branch:        DefaultBranch,
+		Timeout:       DefaultTimeout,
+		OutPutPath:    DefaultOutPutPath,
+		CsvOutputPath: DefaultCsvOutPutPath,
+		Url:           DefaultUrl,
 	}
 
 	if len(args) < 1 {
@@ -38,31 +40,30 @@ func HandleArguments(args []string) Args {
 			arg := strings.Replace(arg, "--", "", 1)
 			i++
 
-			if arg == "numbers" {
+			switch arg {
+			case "numbers":
 				i, err := strconv.Atoi(args[i])
 				if err != nil {
 					fmt.Println(err)
 					os.Exit(1)
 				}
 				result.Numbers = i
-
-			} else if arg == "branch" {
+			case "branch":
 				result.Branch = args[i]
-
-			} else if arg == "timeout" {
+			case "timeout":
 				i, err := strconv.Atoi(args[i])
 				if err != nil {
 					fmt.Println(err)
 					os.Exit(1)
 				}
 				result.Timeout = i
-
-			} else if arg == "output" {
+			case "output":
 				result.OutPutPath = args[i]
-			} else if arg == "url" {
+			case "url":
 				result.Url = args[i]
-			} else {
-				fmt.Println(arg)
+			case "csv-output":
+				result.CsvOutputPath = args[i]
+			default:
 				panic("unregistered flag")
 			}
 		}

@@ -16,7 +16,7 @@ import (
 )
 
 var outputPath = DefaultOutPutPath
-var commitCount = 1
+var commitCount = 0
 var maxCount = DefaultCommitCount
 var branch = DefaultBranch
 var url = DefaultUrl

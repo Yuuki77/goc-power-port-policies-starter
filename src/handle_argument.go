@@ -69,12 +69,14 @@ func HandleArguments(args []string) Args {
 		}
 	}
 
-	out, err := json.Marshal(result)
-	if err != nil {
-		panic(err)
-	}
+	if debug {
+		out, err := json.Marshal(result)
+		if err != nil {
+			panic(err)
+		}
 
-	fmt.Println(string(out))
+		fmt.Println(string(out))
+	}
 
 	return result
 }

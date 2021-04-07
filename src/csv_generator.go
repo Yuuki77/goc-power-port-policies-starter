@@ -11,14 +11,17 @@ import (
 
 var csv_header = []string{"contributor", "created", "reviewed"}
 
-func GenerateCsv(outpath string, counter *CommitCounter) {
+func GenerateCsv(outpath string, counter *CommitCounter, csvOutputPath string) {
 	if _, err := os.Stat(csvOutputPath); os.IsNotExist(err) {
-		os.Mkdir(csvOutputPath, 0755)
+		err := os.Mkdir(csvOutputPath, 0755)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	file, err := os.Create(csvOutputPath + "/result.csv")
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	defer file.Close()
@@ -27,16 +30,24 @@ func GenerateCsv(outpath string, counter *CommitCounter) {
 	defer writer.Flush()
 
 	usedNameMap := map[string]int{}
-	writer.Write(csv_header)
+	err = writer.Write(csv_header)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	for key, value := range counter.CommiterCounterMap {
 		usedNameMap[key]++
 
 		values := strings.Split(key, " ")
-		email := html.UnescapeString(values[2])
-		name := values[0] + " " + values[1] + " " + email
 
-		writer.Write([]string{name, strconv.Itoa(value), strconv.Itoa(counter.ReviewerCounterMap[key])})
+		lastIndex := len(values) - 1
+		email := html.UnescapeString(values[lastIndex])
+		name := strings.Join(values[:lastIndex], " ") + " " + email
+
+		err := writer.Write([]string{name, strconv.Itoa(value), strconv.Itoa(counter.ReviewerCounterMap[key])})
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	for key, value := range counter.ReviewerCounterMap {
@@ -44,16 +55,23 @@ func GenerateCsv(outpath string, counter *CommitCounter) {
 			continue
 		}
 		values := strings.Split(key, " ")
-		email := html.UnescapeString(values[2])
-		name := values[0] + " " + values[1] + " " + email
+		lastIndex := len(values) - 1
+		email := html.UnescapeString(values[lastIndex])
+		name := strings.Join(values[:lastIndex], " ") + " " + email
 
-		writer.Write([]string{name, strconv.Itoa(counter.CommiterCounterMap[key]), strconv.Itoa(value)})
+		err := writer.Write([]string{name, strconv.Itoa(counter.CommiterCounterMap[key]), strconv.Itoa(value)})
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
-func createAndWriteFile(file_name string, content string) {
+func createAndWriteFile(file_name string, content string, outputPath string) {
 	if _, err := os.Stat(outputPath); os.IsNotExist(err) {
-		os.Mkdir(outputPath, 0755)
+		err := os.Mkdir(outputPath, 0755)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	f, err := os.Create(outputPath + file_name)

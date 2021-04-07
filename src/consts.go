@@ -1,6 +1,5 @@
 package src
 
-const debug = false
 const DefaultCommitCount = 1
 const DefaultBranch = "main"
 

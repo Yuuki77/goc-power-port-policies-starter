@@ -13,7 +13,7 @@ Please make sure you have installed golang in your environments
 ### Installation
 
 1. Run chrome os with debug mode
-For example, in Mac ` /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222`
+For example, in Mac `/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222`
 2. Clone the repo
 3. `$ go run main.go`
 
@@ -31,17 +31,17 @@ By Default it will create a folder called csv
 
 
 Also you can pass some parameters
-1. Commit Numbers by default `1`.  
+1. Commit Numbers by default `1`.
   You can specify by --numbers
-2. Repository URL by default `http://chromium.googlesource.com/chromiumos/platform/tast-tests/`  
+2. Repository URL by default `http://chromium.googlesource.com/chromiumos/platform/tast-tests/`
   You can specify by --url
-3. Branch name by default `main`.  
+3. Branch name by default `main`.
   You can specify by --branch
-4. Timeout in sec --timeout by default 30 sec.  
+4. Timeout in sec --timeout by default 30 sec.
   You can specify by --timeout
-5. Commit message files folder path by default `output`.  
-  You can specify by --output
+5. Commit message files folder path by default `output`.
+  You can specify by --output-dir
 
-6. CSV files folder path. By default `csv`.  
+6. CSV files folder path. By default `csv`.
 You can specify by --csv-output
 
